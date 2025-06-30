@@ -1,0 +1,344 @@
+{% extends 'core/base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+  <h1 class="mb-4">Управление справочниками</h1>
+
+  <!-- ====== Формы добавления ====== -->
+  <div class="row g-3 mb-5">
+    <!-- Новая фабрика -->
+    <div class="col-md-4">
+      <div class="card shadow-sm">
+        <div class="card-header">Новая фабрика</div>
+        <div class="card-body">
+          <form id="add-factory-form">
+            {% csrf_token %}
+            <div class="mb-3">
+              <label class="form-label">Название фабрики</label>
+              <input type="text" name="name" class="form-control" required>
+            </div>
+            <button class="btn btn-primary w-100">Добавить</button>
+          </form>
+        </div>
+      </div>
+    </div>
+    <!-- Новый участок -->
+    <div class="col-md-4">
+      <div class="card shadow-sm">
+        <div class="card-header">Новый участок</div>
+        <div class="card-body">
+          <form id="add-unit-form">
+            {% csrf_token %}
+            <div class="mb-3">
+              <label class="form-label">Название участка</label>
+              <input type="text" name="name" class="form-control" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Фабрика</label>
+              <select name="factory" class="form-select" required>
+                <option value="">— выберите фабрику —</option>
+                {% for f in factories %}
+                  <option value="{{ f.id }}">{{ f.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <button class="btn btn-primary w-100">Добавить</button>
+          </form>
+        </div>
+      </div>
+    </div>
+    <!-- Новое оборудование -->
+    <div class="col-md-4">
+      <div class="card shadow-sm">
+        <div class="card-header">Новое оборудование</div>
+        <div class="card-body">
+          <form id="add-equipment-form">
+            {% csrf_token %}
+            <div class="mb-3">
+              <label class="form-label">Название оборудования</label>
+              <input type="text" name="name" class="form-control" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">
+                Участки <small>(Ctrl+клик для мн. выбора)</small>
+              </label>
+              <select name="units" class="form-select" multiple size="4" required>
+                {% for u in units %}
+                  <option value="{{ u.id }}">{{ u.factory.name }} → {{ u.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <button class="btn btn-primary w-100">Добавить</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====== Таблицы ====== -->
+  <div class="row gy-4">
+    <!-- Фабрики -->
+    <div class="col-lg-4">
+      <h3>Фабрики</h3>
+      <table id="factories-table" class="table table-striped">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Название</th>
+            <th>Действия</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for f in factories %}
+            <tr>
+              <td>{{ f.id }}</td>
+              <td>{{ f.name }}</td>
+              <td>
+                <a href="{% url 'hierarchy' 'factory' f.id %}"
+                   class="btn btn-sm btn-outline-primary">
+                  Посмотреть иерархию
+                </a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Участки -->
+    <div class="col-lg-4">
+      <h3>Участки</h3>
+      <table id="units-table" class="table table-striped">
+        <thead>
+          <tr>
+            <th>№</th>
+            <th>Название</th>
+            <th>Фабрика</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in units %}
+            <tr>
+              <td>{{ forloop.counter }}</td>
+              <td>
+                <a href="{% url 'hierarchy' 'unit' u.id %}">
+                  {{ u.name }}
+                </a>
+              </td>
+              <td>{{ u.factory.name }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Оборудование -->
+    <div class="col-lg-4">
+      <h3>Оборудование</h3>
+      <table id="equipment-table" class="table table-striped">
+        <thead>
+          <tr>
+            <th>№</th>
+            <th>Название</th>
+            <th>Участки</th>
+            <th>Фабрики</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for eq in equipment_data %}
+            <tr>
+              <td>{{ forloop.counter }}</td>
+              <td>
+                <a href="{% url 'hierarchy' 'equipment' eq.id %}">
+                  {{ eq.name }}
+                </a>
+              </td>
+              <td>
+                {% for u in eq.units %}
+                  <a href="{% url 'hierarchy' 'unit' u.id %}">
+                    <span class="badge bg-secondary me-1">{{ u.name }}</span>
+                  </a>
+                {% endfor %}
+              </td>
+              <td>
+                {% for f in eq.factories %}
+                  <a href="{% url 'hierarchy' 'factory' f.id %}">
+                    <span class="badge bg-info text-dark me-1">{{ f.name }}</span>
+                  </a>
+                {% endfor %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  // CSRF helper
+  function getCookie(name) {
+    let v = null;
+    document.cookie.split(';').forEach(c => {
+      const [k,val] = c.trim().split('=');
+      if (k === name) v = decodeURIComponent(val);
+    });
+    return v;
+  }
+  const csrftoken = getCookie('csrftoken');
+
+  // POST JSON
+  async function postJSON(url, data) {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type':'application/json',
+        'X-CSRFToken':csrftoken
+      },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) throw new Error(res.status);
+    return res.json();
+  }
+
+  // Перенумерация
+  function renumber(selector) {
+    document.querySelectorAll(selector).forEach((tr,i) => {
+      tr.cells[0].textContent = i + 1;
+    });
+  }
+
+  // Сортировка участков
+  function sortUnits() {
+    const tb = document.querySelector('#units-table tbody');
+    Array.from(tb.rows)
+      .sort((a,b) => {
+        const fa = a.cells[2].textContent.trim().toLowerCase();
+        const fb = b.cells[2].textContent.trim().toLowerCase();
+        if (fa !== fb) return fa.localeCompare(fb);
+        return a.cells[1].textContent.trim().toLowerCase()
+              .localeCompare(b.cells[1].textContent.trim().toLowerCase());
+      })
+      .forEach(r => tb.append(r));
+    renumber('#units-table tbody tr');
+  }
+
+  // Сортировка оборудования
+  function sortEquipment() {
+    const tb = document.querySelector('#equipment-table tbody');
+    Array.from(tb.rows)
+      .sort((a,b) => {
+        const af = Array.from(a.cells[3].querySelectorAll('span'))
+          .map(x=>x.textContent.trim().toLowerCase()).join(',');
+        const bf = Array.from(b.cells[3].querySelectorAll('span'))
+          .map(x=>x.textContent.trim().toLowerCase()).join(',');
+        if (af !== bf) return af.localeCompare(bf);
+        return a.cells[1].textContent.trim().toLowerCase()
+              .localeCompare(b.cells[1].textContent.trim().toLowerCase());
+      })
+      .forEach(r => tb.append(r));
+    renumber('#equipment-table tbody tr');
+  }
+
+  // Добавление фабрики
+  function addFactory(f) {
+    document.querySelector('#factories-table tbody')
+      .insertAdjacentHTML('beforeend',
+        `<tr><td>${f.id}</td>
+             <td><a href="/hierarchy/factory/${f.id}/">${f.name}</a></td>
+         </tr>`);
+    document.querySelector('#add-unit-form select[name="factory"]')
+      .insertAdjacentHTML('beforeend',
+        `<option value="${f.id}">${f.name}</option>`);
+  }
+
+  // Добавление участка
+  function addUnit(u) {
+    const factName = document.querySelector(
+      `#add-unit-form select[name="factory"] option[value="${u.factory}"]`
+    ).textContent;
+    document.querySelector('#units-table tbody')
+      .insertAdjacentHTML('beforeend',
+        `<tr>
+           <td>0</td>
+           <td><a href="/hierarchy/unit/${u.id}/">${u.name}</a></td>
+           <td><a href="/hierarchy/factory/${u.factory}/">${factName}</a></td>
+         </tr>`);
+    document.querySelector('#add-equipment-form select[name="units"]')
+      .insertAdjacentHTML('beforeend',
+        `<option value="${u.id}">${factName} → ${u.name}</option>`);
+    sortUnits();
+  }
+
+  // Добавление оборудования
+  function addEquipment(eq) {
+    const opts = Array.from(
+      document.querySelectorAll('#add-equipment-form select[name="units"] option')
+    ).filter(o => eq.units.includes(o.value));
+    const unitBadges = opts.map(o => {
+      const n = o.textContent.split(' → ')[1];
+      return `<a href="/hierarchy/unit/${o.value}/">
+                <span class="badge bg-secondary me-1">${n}</span>
+              </a>`;
+    }).join('');
+    const factories = Array.from(new Set(
+      opts.map(o => o.textContent.split(' → ')[0])
+    ));
+    const factBadges = factories.map(name =>
+      `<a href="/hierarchy/factory/${ opts.find(o=>o.textContent.startsWith(name)).value.split(' → ')[0] }/">
+         <span class="badge bg-info text-dark me-1">${name}</span>
+       </a>`
+    ).join('');
+    document.querySelector('#equipment-table tbody')
+      .insertAdjacentHTML('beforeend',
+        `<tr>
+           <td>0</td>
+           <td><a href="/hierarchy/equipment/${eq.id}/">${eq.name}</a></td>
+           <td>${unitBadges}</td>
+           <td>${factBadges}</td>
+         </tr>`);
+    sortEquipment();
+  }
+
+  // Инициализация сортировки
+  sortUnits();
+  sortEquipment();
+
+  // Обработчики форм
+  document.getElementById('add-factory-form')
+    .addEventListener('submit', async e => {
+      e.preventDefault();
+      const name = e.target.name.value.trim();
+      if (!name) return;
+      const f = await postJSON('/api/factories/', { name });
+      addFactory(f);
+      e.target.reset();
+    });
+
+  document.getElementById('add-unit-form')
+    .addEventListener('submit', async e => {
+      e.preventDefault();
+      const name    = e.target.name.value.trim();
+      const factory = e.target.factory.value;
+      if (!name || !factory) return;
+      const u = await postJSON('/api/units/', { name, factory });
+      addUnit(u);
+      e.target.reset();
+    });
+
+  document.getElementById('add-equipment-form')
+    .addEventListener('submit', async e => {
+      e.preventDefault();
+      const name    = e.target.name.value.trim();
+      const opts    = Array.from(e.target.units.selectedOptions);
+      if (!name || !opts.length) return;
+      const units   = opts.map(o => o.value);
+      const eq      = await postJSON('/api/equipment/', { name, units });
+      eq.units = units;
+      addEquipment(eq);
+      e.target.reset();
+    });
+});
+</script>
+{% endblock %}

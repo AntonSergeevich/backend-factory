@@ -1,0 +1,97 @@
+{% extends 'core/base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+  <h1 class="mb-4">Иерархия {{ model }} «{{ object }}»</h1>
+
+  <table class="table table-bordered">
+    <thead class="table-light">
+      <tr>
+        <th>Фабрика</th>
+        <th>Участок</th>
+        <th>Оборудование</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if model == 'Factory' %}
+        {% for unit in object.units.all %}
+          {% if unit.equipment.all %}
+            {% for eq in unit.equipment.all %}
+              <tr>
+                <td>{{ object.name }}</td>
+                <td>
+                  <a href="{% url 'hierarchy' 'unit' unit.id %}">
+                    {{ unit.name }}
+                  </a>
+                </td>
+                <td>
+                  <a href="{% url 'hierarchy' 'equipment' eq.id %}">
+                    {{ eq.name }}
+                  </a>
+                </td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td>{{ object.name }}</td>
+              <td>
+                <a href="{% url 'hierarchy' 'unit' unit.id %}">
+                  {{ unit.name }}
+                </a>
+              </td>
+              <td>—</td>
+            </tr>
+          {% endif %}
+        {% endfor %}
+
+      {% elif model == 'Unit' %}
+        <tr class="table-primary">
+          <td>
+            <a href="{% url 'hierarchy' 'factory' object.factory.id %}">
+              {{ object.factory.name }}
+            </a>
+          </td>
+          <td>{{ object.name }}</td>
+          <td>—</td>
+        </tr>
+        {% for eq in object.equipment.all %}
+          <tr>
+            <td>
+              <a href="{% url 'hierarchy' 'factory' object.factory.id %}">
+                {{ object.factory.name }}
+              </a>
+            </td>
+            <td>
+              <a href="{% url 'hierarchy' 'unit' object.id %}">
+                {{ object.name }}
+              </a>
+            </td>
+            <td>
+              <a href="{% url 'hierarchy' 'equipment' eq.id %}">
+                {{ eq.name }}
+              </a>
+            </td>
+          </tr>
+        {% endfor %}
+
+      {% elif model == 'Equipment' %}
+        {% for u in object.units.all %}
+          <tr>
+            <td>
+              <a href="{% url 'hierarchy' 'factory' u.factory.id %}">
+                {{ u.factory.name }}
+              </a>
+            </td>
+            <td>
+              <a href="{% url 'hierarchy' 'unit' u.id %}">
+                {{ u.name }}
+              </a>
+            </td>
+            <td>{{ object.name }}</td>
+          </tr>
+        {% endfor %}
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
