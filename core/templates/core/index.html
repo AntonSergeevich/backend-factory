@@ -154,72 +154,95 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-  // CSRF helper
-  function getCookie(n) {
-    let v = null;
-    document.cookie.split(';').forEach(c => {
-      const [k,val] = c.trim().split('=');
-      if (k === n) v = decodeURIComponent(val);
+  // 1) CSRF helper: достаёт значение куки по имени (нужна для безопасности POST-запросов)
+  function getCookie(name) {
+    let value = null;
+    document.cookie.split(';').forEach(cookie => {
+      const [key, val] = cookie.trim().split('=');
+      if (key === name) value = decodeURIComponent(val);
     });
-    return v;
+    return value;
   }
   const csrftoken = getCookie('csrftoken');
 
-  // POST JSON
-  async function postJSON(url,data) {
-    const r = await fetch(url,{
-      method:'POST',
-      headers:{
-        'Content-Type':'application/json',
-        'X-CSRFToken':csrftoken
+  // 2) postJSON: универсальная обёртка над fetch для отправки JSON + CSRF
+  //    → url: строка, data: JS-объект
+  //    → возвращает распарсенный JSON-ответ или бросает Error по не OK статусу
+  async function postJSON(url, data) {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrftoken
       },
       body: JSON.stringify(data)
     });
-    if(!r.ok) throw new Error(r.status);
-    return r.json();
+    if (!response.ok) {
+      throw new Error(`HTTP error ${response.status}`);
+    }
+    return response.json();
   }
 
-  // Renumber first cell in each row of given selector
+  // 3) renumber: обновляет первую ячейку (№) у каждой строки в селекторе
+  //    selector — CSS-селектор для <tr> элементов, у каждого берём cells[0]
   function renumber(selector) {
-    document.querySelectorAll(selector).forEach((tr,i) => {
-      tr.cells[0].textContent = i+1;
+    document.querySelectorAll(selector).forEach((tr, index) => {
+      tr.cells[0].textContent = index + 1;
     });
   }
 
-  // Sort and renumber units table
+  // 4) sortUnits: сортирует таблицу «Участки» сначала по колонке «Фабрика», потом по имени
+  //    после перестановки DOM-записей вызывает renumber для поддержания порядковых номеров
   function sortUnits() {
-    const tb = document.querySelector('#units-table tbody');
-    Array.from(tb.rows)
-      .sort((a,b) => {
-        const fa=a.cells[2].textContent.toLowerCase();
-        const fb=b.cells[2].textContent.toLowerCase();
-        if(fa!==fb) return fa.localeCompare(fb);
-        return a.cells[1].textContent.toLowerCase()
-               .localeCompare(b.cells[1].textContent.toLowerCase());
-      })
-      .forEach(r=>tb.append(r));
+    const tbody = document.querySelector('#units-table tbody');
+    const rows = Array.from(tbody.rows);
+    rows.sort((a, b) => {
+      const factoryA = a.cells[2].textContent.trim().toLowerCase();
+      const factoryB = b.cells[2].textContent.trim().toLowerCase();
+      if (factoryA !== factoryB) {
+        return factoryA.localeCompare(factoryB);
+      }
+      // если фабрики одинаковые — сравниваем название участка (cells[1])
+      const nameA = a.cells[1].textContent.trim().toLowerCase();
+      const nameB = b.cells[1].textContent.trim().toLowerCase();
+      return nameA.localeCompare(nameB);
+    });
+    // перекладываем отсортированные строки назад в тело таблицы
+    rows.forEach(row => tbody.append(row));
+    // обновляем нумерацию
     renumber('#units-table tbody tr');
   }
 
-  // Sort and renumber equipment table
+  // 5) sortEquipment: сортирует таблицу «Оборудование»
+  //    группирует по списку фабрик (cells[3] содержит <span>-бейджи)
+  //    затем по названию оборудования (cells[1])
   function sortEquipment() {
-    const tb = document.querySelector('#equipment-table tbody');
-    Array.from(tb.rows)
-      .sort((a,b) => {
-        const af = Array.from(a.cells[3].querySelectorAll('span'))
-          .map(x=>x.textContent.toLowerCase()).join(',');
-        const bf = Array.from(b.cells[3].querySelectorAll('span'))
-          .map(x=>x.textContent.toLowerCase()).join(',');
-        if(af!==bf) return af.localeCompare(bf);
-        return a.cells[1].textContent.toLowerCase()
-               .localeCompare(b.cells[1].textContent.toLowerCase());
-      })
-      .forEach(r=>tb.append(r));
+    const tbody = document.querySelector('#equipment-table tbody');
+    const rows = Array.from(tbody.rows);
+    rows.sort((a, b) => {
+      // собираем строку из имён всех бейджей фабрик в ячейке 4 (index 3)
+      const factA = Array.from(a.cells[3].querySelectorAll('span'))
+        .map(span => span.textContent.trim().toLowerCase())
+        .join(',');
+      const factB = Array.from(b.cells[3].querySelectorAll('span'))
+        .map(span => span.textContent.trim().toLowerCase())
+        .join(',');
+      if (factA !== factB) {
+        return factA.localeCompare(factB);
+      }
+      // если фабрики совпали, сравниваем название (cells[1])
+      const nameA = a.cells[1].textContent.trim().toLowerCase();
+      const nameB = b.cells[1].textContent.trim().toLowerCase();
+      return nameA.localeCompare(nameB);
+    });
+    rows.forEach(row => tbody.append(row));
     renumber('#equipment-table tbody tr');
   }
 
-  // === Add Factory ===
+  // 6) addFactory: вставляет новую строку в таблицу «Фабрики»
+  //    и добавляет опцию в селект формы добавления участка
   function addFactory(f) {
+    // 6.1) строка в таблице
     document.querySelector('#factories-table tbody')
       .insertAdjacentHTML('beforeend', `
         <tr>
@@ -233,102 +256,126 @@ document.addEventListener('DOMContentLoaded', () => {
           </td>
         </tr>
       `);
-    const sel = document.querySelector('#add-unit-form select[name="factory"]');
-    sel.insertAdjacentHTML('beforeend',
+    // 6.2) опция в форме «Новый участок»
+    const unitSelect = document.querySelector('#add-unit-form select[name="factory"]');
+    unitSelect.insertAdjacentHTML('beforeend',
       `<option value="${f.id}">${f.name}</option>`
     );
   }
 
-  // === Add Unit ===
+  // 7) addUnit: вставляет новую строку в таблицу «Участки»
+  //    обновляет селект «Участки» в форме оборудования и вызывает сортировку
   function addUnit(u) {
-    const selF = document.querySelector('#add-unit-form select[name="factory"]');
-    const factName = selF.options[selF.selectedIndex].text;
+    // 7.1) определяем имя фабрики из выбранной <option>
+    const unitForm = document.querySelector('#add-unit-form');
+    const selected = unitForm.querySelector('select[name="factory"]');
+    const factName = selected.options[selected.selectedIndex].text;
+
+    // 7.2) вставляем строку в таблицу Unit
     document.querySelector('#units-table tbody')
       .insertAdjacentHTML('beforeend', `
         <tr>
-          <td>0</td>
-          <td><a href="/hierarchy/unit/${u.id}/">${u.name}</a></td>
+          <td>0</td>  <!-- нумерация будет пересчитана sortUnits() -->
+          <td>
+            <a href="/hierarchy/unit/${u.id}/">${u.name}</a>
+          </td>
           <td>${factName}</td>
         </tr>
       `);
-    // update equipment select
+
+    // 7.3) добавляем опцию в селект «Новое оборудование»
     document.querySelector('#add-equipment-form select[name="units"]')
       .insertAdjacentHTML('beforeend',
         `<option value="${u.id}">${factName} → ${u.name}</option>`
       );
+
+    // 7.4) сортируем таблицу участков и обновляем номера
     sortUnits();
   }
 
-  // === Add Equipment ===
+  // 8) addEquipment: вставляет новую строку в таблицу «Оборудование»
+  //    и вызывает сортировку
   function addEquipment(eq) {
-    const opts = Array.from(
+    // 8.1) находим опции, соответствующие переданным ID units
+    const options = Array.from(
       document.querySelectorAll('#add-equipment-form select[name="units"] option')
-    ).filter(o=>eq.units.includes(o.value));
+    ).filter(opt => eq.units.includes(opt.value));
 
-    const unitBadges = opts.map(o=>{
-      const n=o.textContent.split(' → ')[1];
-      return `<span class="badge bg-secondary me-1">${n}</span>`;
+    // 8.2) собираем бейджи участков
+    const unitBadges = options.map(opt => {
+      const name = opt.textContent.split(' → ')[1];
+      return `<span class="badge bg-secondary me-1">${name}</span>`;
     }).join('');
 
+    // 8.3) собираем уникальные фабрики
     const factories = Array.from(new Set(
-      opts.map(o=>o.textContent.split(' → ')[0])
+      options.map(opt => opt.textContent.split(' → ')[0])
     ));
-    const factBadges = factories.map(n=>
-      `<span class="badge bg-info text-dark me-1">${n}</span>`
+    const factBadges = factories.map(name =>
+      `<span class="badge bg-info text-dark me-1">${name}</span>`
     ).join('');
 
+    // 8.4) вставляем строку в таблицу Equipment
     document.querySelector('#equipment-table tbody')
       .insertAdjacentHTML('beforeend', `
         <tr>
-          <td>0</td>
-          <td><a href="/hierarchy/equipment/${eq.id}/">${eq.name}</a></td>
+          <td>0</td>  <!-- будет перенумеровано sortEquipment() -->
+          <td>
+            <a href="/hierarchy/equipment/${eq.id}/">${eq.name}</a>
+          </td>
           <td>${unitBadges}</td>
           <td>${factBadges}</td>
         </tr>
       `);
+
+    // 8.5) сортируем и нумеруем
     sortEquipment();
   }
 
-  // Initialize sort order
+  // 9) При инициализации страницы — сразу приводим существующие данные в порядок
   sortUnits();
   sortEquipment();
 
-  // === Event listeners ===
+  // 10) Обработчики форм: блокируем сабмит, отправляем AJAX, вставляем новые записи
 
+  // 10.1) Форма «Новая фабрика»
   document.getElementById('add-factory-form')
-    .addEventListener('submit', async e => {
-      e.preventDefault();
-      const name = e.target.name.value.trim();
-      if(!name) return;
+    .addEventListener('submit', async event => {
+      event.preventDefault();
+      const name = event.target.name.value.trim();
+      if (!name) return; // не отправляем пустое
       const f = await postJSON('/api/factories/', { name });
       addFactory(f);
-      e.target.reset();
+      event.target.reset();
     });
 
+  // 10.2) Форма «Новый участок»
   document.getElementById('add-unit-form')
-    .addEventListener('submit', async e => {
-      e.preventDefault();
-      const name = e.target.name.value.trim();
-      const factory = e.target.factory.value;
-      if(!name||!factory) return;
+    .addEventListener('submit', async event => {
+      event.preventDefault();
+      const name    = event.target.name.value.trim();
+      const factory = event.target.factory.value;
+      if (!name || !factory) return;
       const u = await postJSON('/api/units/', { name, factory });
       addUnit(u);
-      e.target.reset();
+      event.target.reset();
     });
 
+  // 10.3) Форма «Новое оборудование»
   document.getElementById('add-equipment-form')
-    .addEventListener('submit', async e => {
-      e.preventDefault();
-      const name = e.target.name.value.trim();
-      const opts = Array.from(e.target.units.selectedOptions);
-      if(!name||!opts.length) return;
-      const units = opts.map(o=>o.value);
+    .addEventListener('submit', async event => {
+      event.preventDefault();
+      const name = event.target.name.value.trim();
+      const opts = Array.from(event.target.units.selectedOptions);
+      if (!name || !opts.length) return;
+      const units = opts.map(o => o.value);
       const eq = await postJSON('/api/equipment/', { name, units });
       eq.units = units;
       addEquipment(eq);
-      e.target.reset();
+      event.target.reset();
     });
 
 });
 </script>
+
 {% endblock %}
