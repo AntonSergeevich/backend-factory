@@ -3,7 +3,7 @@
 
 Удобный бэкенд на Django + динамический фронтенд на Bootstrap для управления справочниками:
 - **Фабрика** → **Участки** → **Оборудование**
-- CRUD через DRF API и «на лету» обновляемый HTML-интерфейс
+- CRUD через DRF API и обновляемый без перезагрузки HTML-интерфейс
 - Динамические таблицы с сортировкой, нумерацией и бейджами
 
 ---
@@ -25,7 +25,7 @@
 - Django REST Framework
 - SQLite (по умолчанию) или PostgreSQL
 - Bootstrap 5
-- Vanilla JavaScript (Fetch API)
+- JavaScript (Fetch API)
 
 ---
 
