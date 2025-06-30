@@ -25,7 +25,7 @@
 - Django REST Framework
 - SQLite (по умолчанию) или PostgreSQL
 - Bootstrap 5
-- Vanilla JavaScript (Fetch API)
+- JavaScript (Fetch API)
 
 ---
 
